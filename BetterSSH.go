@@ -3,10 +3,14 @@ package BetterSSH
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -18,6 +22,7 @@ type Client struct {
 	stdin         io.WriteCloser
 	stdout        io.Reader
 	stdoutscanner *bufio.Scanner
+	sftp          *sftp.Client
 }
 
 func Connect(host string, port int, username string, password string) (*Client, error) {
@@ -60,7 +65,21 @@ func Connect(host string, port int, username string, password string) (*Client, 
 		session: session,
 		stdin:   stdin,
 		stdout:  stdout,
+		sftp:    nil,
 	}, nil
+}
+
+func (c *Client) ConnectSFPT() error {
+	sftpClient, err := sftp.NewClient(c.client)
+	if err != nil {
+		return err
+	}
+	c.sftp = sftpClient
+	return nil
+}
+
+func (c *Client) DisconnectSFPT() {
+	c.sftp.Close()
 }
 
 func (c *Client) Execute(command string) (string, int) {
@@ -118,4 +137,30 @@ func (c *Client) Disconnect() error {
 		return err
 	}
 	return c.client.Close()
+}
+
+func (c *Client) CopyFile(srcPath string, dstPath string) error {
+	if c.sftp == nil {
+		return errors.New("Please first connect to the Fileserver")
+	}
+	// Open the source file
+	absSrcPath, err := filepath.Abs(srcPath)
+	srcFile, err := os.Open(absSrcPath)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	// Create the destination file
+	dstFile, err := c.sftp.Create(dstPath)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	// write to file
+	if _, err := dstFile.ReadFrom(srcFile); err != nil {
+		return err
+	}
+	return nil
 }
