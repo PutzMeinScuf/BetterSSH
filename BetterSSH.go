@@ -113,7 +113,6 @@ func (c *Client) Execute(command string) (string, int) {
 		}
 		fullBuffer = append(fullBuffer, buf...)
 		//fmt.Printf("%v\n\n", fullBuffer)
-
 		if res := bytes.Compare(fullBuffer[len(fullBuffer)-7:], []byte{1, 8, 7, 10, 1, 8, 7}); res == 0 {
 			commendHasNoOutput = true
 		}
