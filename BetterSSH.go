@@ -59,7 +59,10 @@ func Connect(host string, port int, username string, password string) (*Client, 
 		log.Fatal(err.Error())
 	}
 
-	session.Shell()
+	err = session.Shell()
+	if err != nil {
+		return nil, err
+	}
 	return &Client{
 		client:  client,
 		session: session,
@@ -78,16 +81,24 @@ func (c *Client) ConnectSFPT() error {
 	return nil
 }
 
-func (c *Client) DisconnectSFPT() {
-	c.sftp.Close()
+func (c *Client) DisconnectSFPT() error {
+	err := c.sftp.Close()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *Client) Execute(command string) (string, int) {
-	c.stdin.Write([]byte("echo \x01\x08\x07\n"))
+	_, err := c.stdin.Write([]byte("echo \x01\x08\x07\n"))
 	log.Println("Execute Command")
-	c.stdin.Write([]byte(command + "\n"))
-	c.stdin.Write([]byte("oldret=$(echo $?) && echo \x01\x08\x07 && echo $oldret\n"))
-	c.stdin.Write([]byte("echo \x01\x08\x07\n"))
+	_, err = c.stdin.Write([]byte(command + " 2>&1\n"))
+	_, err = c.stdin.Write([]byte("oldret=$(echo $?) && echo \x01\x08\x07 && echo $oldret\n"))
+	_, err = c.stdin.Write([]byte("echo \x01\x08\x07\n"))
+	if err != nil {
+		log.Fatal(err)
+		return "", 1
+	}
 	log.Println("Reading...")
 	fullBuffer := []byte{0, 0, 0, 0, 0, 0}
 	startSet := false
@@ -101,7 +112,7 @@ func (c *Client) Execute(command string) (string, int) {
 			log.Fatal(err)
 		}
 		fullBuffer = append(fullBuffer, buf...)
-		//fmt.Printf("%v\n\n", fullBuffer)
+		fmt.Printf("%v\n\n", fullBuffer)
 		if res := bytes.Compare(fullBuffer[len(fullBuffer)-7:], []byte{1, 8, 7, 10, 1, 8, 7}); res == 0 {
 			commendHasNoOutput = true
 		}
@@ -113,7 +124,15 @@ func (c *Client) Execute(command string) (string, int) {
 				returnCode, _ := strconv.Atoi(string(fullBuffer[commendEnd+5 : len(fullBuffer)-4]))
 				if commendHasNoOutput == false {
 					//return fullBuffer, fullBuffer[start:commendEnd], fullBuffer[commendEnd+5 : len(fullBuffer)-4]
-					return string(fullBuffer[start:commendEnd]), returnCode
+					if res := bytes.Compare(fullBuffer[commendEnd:commendEnd+1], []byte{10}); res == 0 {
+						//With new line
+						log.Println("With")
+						return string(fullBuffer[start:commendEnd]), returnCode
+					} else {
+						//Without new line
+						log.Println("Without")
+						return string(fullBuffer[start : commendEnd+1]), returnCode
+					}
 				} else {
 					//return fullBuffer, nil, fullBuffer[commendEnd+5 : len(fullBuffer)-4]
 					return "", returnCode
@@ -128,7 +147,8 @@ func (c *Client) Execute(command string) (string, int) {
 
 func (c *Client) ExecuteAsSudo(command string, password string) (string, int) {
 	sudoCommend := "echo \"" + password + "\" | sudo -S " + command
-	return c.Execute(sudoCommend)
+	out, returnCode := c.Execute(sudoCommend)
+	return out, returnCode
 }
 
 func (c *Client) Disconnect() error {
