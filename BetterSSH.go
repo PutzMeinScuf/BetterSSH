@@ -126,11 +126,11 @@ func (c *Client) Execute(command string) (string, int) {
 					//return fullBuffer, fullBuffer[start:commendEnd], fullBuffer[commendEnd+5 : len(fullBuffer)-4]
 					if res := bytes.Compare(fullBuffer[commendEnd:commendEnd+1], []byte{10}); res == 0 {
 						//With new line
-						log.Println("With")
+						//log.Println("With")
 						return string(fullBuffer[start:commendEnd]), returnCode
 					} else {
 						//Without new line
-						log.Println("Without")
+						//log.Println("Without")
 						return string(fullBuffer[start : commendEnd+1]), returnCode
 					}
 				} else {
